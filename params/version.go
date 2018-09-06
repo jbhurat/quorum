@@ -54,14 +54,12 @@ func VersionWithCommit(gitCommit string) string {
 	return vsn
 }
 
+// QuorumAndGethVersionWithCommit holds the Quorum ANd Geth version string, appending the git commit hash to Quorum Version if present
 func QuorumAndGethVersionWithCommit(gitCommit string) string {
 	v := QuorumVersion
-	if VersionMeta != "" {
-		v += "-" + VersionMeta
-	}
 	if len(gitCommit) >= 8 {
 		v += "-" + gitCommit[:8]
 	}
 
-	return fmt.Sprintf("%s/Geth-v%d.%d.%d", v, VersionMajor, VersionMinor, VersionPatch)
+	return fmt.Sprintf("%s/Geth-v%s", v, Version)
 }

@@ -280,6 +280,7 @@ func (pm *ProtocolManager) isNodeAlreadyInCluster(node *discover.Node) error {
 
 	for _, peer := range pm.peers {
 		peerRaftId := peer.address.RaftId
+		peerRaftPort := peer.address.RaftPort
 		peerNode := peer.p2pNode
 
 		if peerNode.ID == node.ID {
@@ -289,7 +290,7 @@ func (pm *ProtocolManager) isNodeAlreadyInCluster(node *discover.Node) error {
 		if peerNode.IP.Equal(node.IP) {
 			if peerNode.TCP == node.TCP {
 				return fmt.Errorf("existing node %v with raft ID %v is already using eth p2p at %v:%v", peerNode.ID, peerRaftId, node.IP, node.TCP)
-			} else if peerNode.RaftPort == node.RaftPort {
+			} else if peerRaftPort == node.RaftPort {
 				return fmt.Errorf("existing node %v with raft ID %v is already using raft at %v:%v", peerNode.ID, peerRaftId, node.IP, node.RaftPort)
 			}
 		}

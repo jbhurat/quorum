@@ -997,6 +997,14 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 			bc.reportBlock(block, nil, err)
 			return i, events, coalescedLogs, err
 		}
+
+		// Check if block is inserted into the chain, if yes then ignore it
+		if bc.GetBlockByHash(block.Hash()) != nil {
+			log.Info("Block already inserted in chain", "number", block.Number(), "hash", block.Hash())
+			stats.ignored++
+			continue
+		}
+
 		// Create a new statedb using the parent block and report an
 		// error if it fails.
 		var parent *types.Block

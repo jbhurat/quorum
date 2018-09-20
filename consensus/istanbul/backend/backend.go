@@ -187,12 +187,13 @@ func (sb *backend) Commit(proposal istanbul.Proposal, seals [][]byte) error {
 	if sb.proposedBlockHash == block.Hash() {
 		// feed block hash to Seal() and wait the Seal() result
 		sb.commitCh <- block
+
+		if sb.broadcaster != nil {
+			sb.broadcaster.Enqueue(fetcherID, block)
+		}
 		return nil
 	}
 
-	if sb.broadcaster != nil {
-		sb.broadcaster.Enqueue(fetcherID, block)
-	}
 	return nil
 }
 

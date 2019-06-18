@@ -191,7 +191,7 @@ OUTER:
 			if r0.state != StatePrepared {
 				t.Errorf("state mismatch: have %v, want %v", r0.state, StatePrepared)
 			}
-			if r0.current.Commits.Size() >= 2*r0.valSet.Size()/3 {
+			if r0.current.Commits.Size() > 2*r0.valSet.Size()/3 {
 				t.Errorf("the size of commit messages should be less than %v", 2*r0.valSet.Size()/3)
 			}
 			if r0.current.IsHashLocked() {

@@ -17,6 +17,7 @@
 package core
 
 import (
+	"math"
 	"math/big"
 	"sync"
 
@@ -98,7 +99,7 @@ func (c *core) handleRoundChange(msg *message, src istanbul.Validator) error {
 			c.sendRoundChange(roundView.Round)
 		}
 		return nil
-	} else if num == int(2*c.valSet.Size()/3) && (c.waitingForRoundChange || cv.Round.Cmp(roundView.Round) < 0) {
+	} else if num == int(math.Ceil(float64(2)*float64(c.valSet.Size())/3)) && (c.waitingForRoundChange || cv.Round.Cmp(roundView.Round) < 0) {
 		// We've received 2f+1 ROUND CHANGE messages, start a new round immediately.
 		c.startNewRound(roundView.Round)
 		return nil

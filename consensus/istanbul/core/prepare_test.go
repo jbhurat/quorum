@@ -214,7 +214,7 @@ OUTER:
 			if r0.state != StatePreprepared {
 				t.Errorf("state mismatch: have %v, want %v", r0.state, StatePreprepared)
 			}
-			if r0.current.Prepares.Size() >= 2*r0.valSet.Size()/3 {
+			if r0.current.Prepares.Size() > 2*r0.valSet.Size()/3 {
 				t.Errorf("the size of PREPARE messages should be less than %v", 2*r0.valSet.Size()/3)
 			}
 			if r0.current.IsHashLocked() {

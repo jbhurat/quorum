@@ -55,6 +55,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethstats"
 	"github.com/ethereum/go-ethereum/extension"
 	"github.com/ethereum/go-ethereum/graphql"
+	"github.com/ethereum/go-ethereum/ibft"
 	"github.com/ethereum/go-ethereum/les"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
@@ -1836,6 +1837,25 @@ func RegisterPermissionService(stack *node.Node) {
 		Fatalf("Failed to register the permission service: %v", err)
 	}
 	log.Info("permission service registered")
+}
+// RegisterIBFTServiceIfEnabled registers IBFT Service
+// FIXME ethChan cannot be accessed outside of stack.Register() call, hence it returns an error when
+// IBFT is not defined, a solution to this approach could be to use a dummy service which does nothing
+// When IBFT consensus is not used (NotAnIBFTService)
+func RegisterIBFTServiceIfEnabled(stack *node.Node, ctx *cli.Context, ethChan chan *eth.Ethereum) {
+	if err := stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
+		ethereum := <-ethChan
+		ethChan <- ethereum
+		if _, ok := ethereum.Engine().(consensus.Istanbul); !ok {
+			log.Info("Not registering IBFT Service as IBFT Consensus is not used")
+			return nil, errors.New("IBFT consensus is not used")
+		}
+		log.Info("Node", "name", stack.Config().Name)
+		return ibft.NewIBFTService(ctx, ethereum)
+	}); err != nil {
+		log.Info("Failed to register the IBFT service: %v", err)
+	}
+
 }
 
 func RegisterRaftService(stack *node.Node, ctx *cli.Context, nodeCfg *node.Config, ethChan chan *eth.Ethereum) {

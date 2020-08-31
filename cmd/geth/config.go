@@ -170,6 +170,9 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 		utils.RegisterRaftService(stack, ctx, &cfg.Node, ethChan)
 	}
 
+	// RegisterIBFTIfEnabled will enable IBFT Service if it is enabled
+	utils.RegisterIBFTServiceIfEnabled(stack, ctx, ethChan)
+
 	if ctx.GlobalBool(utils.DashboardEnabledFlag.Name) {
 		utils.RegisterDashboardService(stack, &cfg.Dashboard, gitCommit)
 	}

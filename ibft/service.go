@@ -3,25 +3,38 @@ package ibft
 import (
 	"time"
 
+	"github.com/ethereum/go-ethereum/ibft/minter"
+
+	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/eth"
 	"github.com/ethereum/go-ethereum/event"
+	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
 type IBFTService struct {
-	eth *eth.Ethereum
-
+	eth        *eth.Ethereum
+	ibftEngine consensus.Istanbul
+	minter     *minter.Minter
+	stop       chan struct{}
 	// Blockchain events
 	eventMux         *event.TypeMux
 	newMinedBlockSub *event.TypeMuxSubscription
-
-	stop chan struct{}
 }
 
-func NewIBFTService(eth *eth.Ethereum, eventMux *event.TypeMux) *IBFTService {
-	return &IBFTService{eth: eth, eventMux: eventMux, stop: make(chan struct{})}
+func NewIBFTService(ctx *node.ServiceContext, eth *eth.Ethereum, eventMux *event.TypeMux) *IBFTService {
+	ibftEngine := eth.Engine().(consensus.Istanbul)
+	minter := minter.New(eth, ibftEngine, ctx.NodeKey(), eventMux)
+
+	return &IBFTService{
+		eth:        eth,
+		ibftEngine: ibftEngine,
+		eventMux:   eventMux,
+		minter:     minter,
+		stop:       make(chan struct{}),
+	}
 }
 
 func (s *IBFTService) Protocols() []p2p.Protocol {
@@ -33,12 +46,13 @@ func (s *IBFTService) APIs() []rpc.API {
 }
 
 func (s *IBFTService) Start(server *p2p.Server) error {
+	s.minter.Start()
 	go s.eventLoop()
-	go s.mintingLoop()
 	return nil
 }
 
 func (s *IBFTService) Stop() error {
+	s.minter.Stop()
 	close(s.stop)
 	return nil
 }
@@ -52,6 +66,7 @@ func (s *IBFTService) eventLoop() {
 		case muxEvent := <-s.newMinedBlockSub.Chan():
 			switch muxEvent.Data.(type) {
 			case core.NewMinedBlockEvent:
+				// FIXME: Change this to async code
 				time.Sleep(50 * time.Millisecond) // Simulates the time of a consensus execution.
 				// TODO: Insert the block into blockchain.
 			}
@@ -59,8 +74,4 @@ func (s *IBFTService) eventLoop() {
 			return
 		}
 	}
-}
-
-func (s *IBFTService) mintingLoop() {
-	// TODO: Mint new blocks and publish them as NewMinedBlockEvents
 }

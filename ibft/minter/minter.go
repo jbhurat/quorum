@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/ethereum/go-ethereum/core/rawdb"
+	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -22,14 +23,16 @@ import (
 )
 
 type Minter struct {
+	mu		   sync.Mutex
 	eth        *eth.Ethereum
 	ibftEngine consensus.Istanbul
 	txPreChan  chan core.NewTxsEvent
 	txPreSub   event.Subscription
 	nodeKey    *ecdsa.PrivateKey
-	requests   chan struct{}
+	request    chan chan<- *types.Block
 	eventMux   *event.TypeMux
 	stop       chan struct{}
+	work       *work
 }
 
 func New(eth *eth.Ethereum, ibftEngine consensus.Istanbul, nodeKey *ecdsa.PrivateKey, eventMux *event.TypeMux) *Minter {
@@ -38,10 +41,11 @@ func New(eth *eth.Ethereum, ibftEngine consensus.Istanbul, nodeKey *ecdsa.Privat
 		ibftEngine: ibftEngine,
 		txPreChan:  make(chan core.NewTxsEvent, 4096),
 		nodeKey:    nodeKey,
-		requests:   make(chan struct{}, 1),
+		request:   make(chan chan<- *types.Block),
 		eventMux:   eventMux,
 		stop:       make(chan struct{})}
 
+	minter.txPreSub = eth.TxPool().SubscribeNewTxsEvent(minter.txPreChan)
 	return minter
 }
 
@@ -51,6 +55,9 @@ type work struct {
 	publicState  *state.StateDB
 	privateState *state.StateDB
 	header       *types.Header
+	publicReceipts types.Receipts
+	privateReceipts types.Receipts
+	logs []*types.Log
 }
 
 func (m *Minter) createWork() *work {
@@ -96,46 +103,40 @@ func (m *Minter) getTransactions() *types.TransactionsByPriceAndNonce {
 	return types.NewTransactionsByPriceAndNonce(signer, allAddrTxs)
 }
 
-func (m *Minter) Start() {
-	go m.mintingLoop()
-}
-
-func (m *Minter) Stop() {
+func (m *Minter) Close() {
+	m.txPreSub.Unsubscribe()
 	close(m.stop)
 }
 
-func (m *Minter) RequestBlock() {
-	m.requests <- struct{}{}
-}
-
-func (m *Minter) mintingLoop() {
-	m.txPreSub = m.eth.TxPool().SubscribeNewTxsEvent(m.txPreChan)
-	defer m.txPreSub.Unsubscribe()
-
-	// Temporary until we enable the consensus logic
-	if !m.eth.AccountManager().Config().InsecureUnlockAllowed {
-		return
-	}
-
-	for {
-		select {
-		case <-m.requests:
-			err := m.createBlock()
-			if err != nil {
-				panic(err) // FIXME: proper error handling
+func (m *Minter) RequestBlock() <-chan *types.Block {
+	m.mu.Lock()
+	proposal := make(chan *types.Block)
+	go func() {
+		for {
+			select {
+			case <-m.txPreChan:
+				block, err := m.createBlock()
+				if err != nil {
+					panic(err) // FIXME: proper error handling
+				}
+				proposal <- block
+				return
+			case err := <-m.txPreSub.Err():
+				panic(err)
+			case <-m.stop:
+				return
 			}
-		case <-m.stop:
-			return
 		}
-	}
+	}()
+	return proposal
 }
 
-func (m *Minter) createBlock() error {
-	<-m.txPreChan // wait until we have pending transactions
-
+func (m *Minter) createBlock() (*types.Block, error) {
 	work := m.createWork()
+	m.work = work
 
-	committedTxs, publicReceipts, privateReceipts, logs := m.commitTransactions(work)
+	var committedTxs types.Transactions
+	committedTxs, work.publicReceipts, work.privateReceipts, work.logs = m.commitTransactions(work)
 
 	// commit state root after all state transitions.
 	work.header.Root = work.publicState.IntermediateRoot(m.eth.BlockChain().Config().IsEIP158(work.header.Number))
@@ -143,50 +144,51 @@ func (m *Minter) createBlock() error {
 	// update block hash since it is now available, but was not when the
 	// receipt/log of individual transactions were created:
 	headerHash := work.header.Hash()
-	for _, l := range logs {
+	for _, l := range work.logs {
 		l.BlockHash = headerHash
 	}
 
-	block, err := m.ibftEngine.FinalizeAndAssemble(m.eth.BlockChain(), work.header, work.publicState, committedTxs, nil, publicReceipts)
+	block, err := m.ibftEngine.FinalizeAndAssemble(m.eth.BlockChain(), work.header, work.publicState, committedTxs, nil, work.publicReceipts)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	sealHash := m.ibftEngine.SealHash(block.Header())
 	block, err = m.sealBlock(block, sealHash)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	m.Seal()
-	m.InsertBlockAndUpdateState(block, publicReceipts, privateReceipts, work.publicState, work.privateState)
 
 	m.eventMux.Post(core.NewMinedBlockEvent{Block: block})
 
-	// TODO State has been ignored in InsertBlockAndUpdateState, this will change based on State type
-	var events []interface{}
-	events = append(events, core.ChainEvent{Block: block, Hash: block.Hash(), Logs: logs})
-	events = append(events, core.ChainHeadEvent{Block: block})
-	m.eth.BlockChain().PostChainEvents(events, logs)
-
 	elapsed := time.Since(time.Unix(0, int64(work.header.Time)))
 	log.Info("🔨  Mined block", "number", block.Number(), "hash", fmt.Sprintf("%x", block.Hash().Bytes()[:4]), "elapsed", elapsed)
+	return block, nil
+}
+
+func (m *Minter) Apply(block *types.Block) error {
+	defer m.mu.Unlock()
+	m.insertBlockAndUpdateState(block)
+
+	// TODO State has been ignored in InsertBlockAndUpdateState, this will change based on State type
+	var events []interface{}
+	events = append(events, core.ChainEvent{Block: block, Hash: block.Hash(), Logs: m.work.logs})
+	events = append(events, core.ChainHeadEvent{Block: block})
+	m.eth.BlockChain().PostChainEvents(events, m.work.logs)
+
 	return nil
 }
 
-func (m *Minter) Seal() {
-	// Sleeping for 50 millisecond to simulate consensus
-	time.Sleep(50 * time.Millisecond)
-}
-
-func (m *Minter) InsertBlockAndUpdateState(block *types.Block, publicReceipts types.Receipts, privateReceipts types.Receipts, publicState *state.StateDB, privateState *state.StateDB) {
+func (m *Minter) insertBlockAndUpdateState(block *types.Block) {
 	hash := block.Hash()
 	// Different block could share same sealhash, deep copy here to prevent write-write conflict.
 	var (
-		pubReceipts = make([]*types.Receipt, len(publicReceipts))
-		prvReceipts = make([]*types.Receipt, len(privateReceipts))
+		w = m.work
+		pubReceipts = make([]*types.Receipt, len(w.publicReceipts))
+		prvReceipts = make([]*types.Receipt, len(w.privateReceipts))
 		logs        []*types.Log
 	)
-	offset := len(publicReceipts)
-	for i, receipt := range publicReceipts {
+	offset := len(w.publicReceipts)
+	for i, receipt := range w.publicReceipts {
 		// add block location fields
 		receipt.BlockHash = hash
 		receipt.BlockNumber = block.Number()
@@ -202,7 +204,7 @@ func (m *Minter) InsertBlockAndUpdateState(block *types.Block, publicReceipts ty
 		logs = append(logs, receipt.Logs...)
 	}
 
-	for i, receipt := range privateReceipts {
+	for i, receipt := range w.privateReceipts {
 		// add block location fields
 		receipt.BlockHash = hash
 		receipt.BlockNumber = block.Number()
@@ -222,12 +224,12 @@ func (m *Minter) InsertBlockAndUpdateState(block *types.Block, publicReceipts ty
 
 	// Commit block and state to database.
 	// TODO Ignoring the status for now
-	_, err := m.eth.BlockChain().WriteBlockWithState(block, allReceipts, publicState, privateState)
+	_, err := m.eth.BlockChain().WriteBlockWithState(block, allReceipts, w.publicState, w.privateState)
 	if err != nil {
 		log.Error("Failed writing block to chain", "err", err)
 		return
 	}
-	if err := rawdb.WritePrivateBlockBloom(m.eth.ChainDb(), block.NumberU64(), privateReceipts); err != nil {
+	if err := rawdb.WritePrivateBlockBloom(m.eth.ChainDb(), block.NumberU64(), w.privateReceipts); err != nil {
 		log.Error("Failed writing private block bloom", "err", err)
 		return
 	}

@@ -1,6 +1,8 @@
 package ibft
 
 import (
+	"math/big"
+
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/eth"
 	"github.com/ethereum/go-ethereum/ibft/minter"
@@ -10,24 +12,21 @@ import (
 )
 
 type IBFTService struct {
-	eth             *eth.Ethereum
-	ibftEngine      consensus.Istanbul
-	minter          *minter.Minter
-	stop            chan struct{}
-	miningInProcess bool
+	eth        *eth.Ethereum
+	ibftEngine consensus.Istanbul
+	stop       chan struct{}
+	minter     *minter.Minter
+	consensus  Consensus
 }
 
 func NewIBFTService(ctx *node.ServiceContext, eth *eth.Ethereum) (*IBFTService, error) {
 	ibftEngine := eth.Engine().(consensus.Istanbul)
-	minter := minter.New(eth, ibftEngine, ctx.NodeKey(), ctx.EventMux)
-
-	service := &IBFTService{
+	return &IBFTService{
 		eth:        eth,
 		ibftEngine: ibftEngine,
-		minter:     minter,
+		minter:     minter.New(eth, ibftEngine, ctx.NodeKey(), ctx.EventMux),
 		stop:       make(chan struct{}),
-	}
-	return service, nil
+	}, nil
 }
 
 func (s *IBFTService) Protocols() []p2p.Protocol {
@@ -39,12 +38,26 @@ func (s *IBFTService) APIs() []rpc.API {
 }
 
 func (s *IBFTService) Start(server *p2p.Server) error {
-	s.minter.Start()
+	go s.consensusLoop()
 	return nil
 }
 
 func (s *IBFTService) Stop() error {
-	s.minter.Stop()
+	s.minter.Close()
 	close(s.stop)
 	return nil
+}
+
+func (s *IBFTService) consensusLoop() {
+	sequence := big.NewInt(0).Set(s.eth.BlockChain().CurrentHeader().Number)
+	for {
+		sequence.Add(sequence, big.NewInt(1))
+		decision := s.consensus.Execute(sequence, s.minter)
+		select {
+		case block := <-decision:
+			s.minter.Apply(block)
+		case <-s.stop:
+			return
+		}
+	}
 }

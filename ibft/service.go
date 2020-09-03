@@ -25,6 +25,7 @@ func NewIBFTService(ctx *node.ServiceContext, eth *eth.Ethereum) (*IBFTService, 
 		eth:        eth,
 		ibftEngine: ibftEngine,
 		minter:     minter.New(eth, ibftEngine, ctx.NodeKey(), ctx.EventMux),
+		consensus: &FakeConsensus{},
 		stop:       make(chan struct{}),
 	}, nil
 }
@@ -49,6 +50,10 @@ func (s *IBFTService) Stop() error {
 }
 
 func (s *IBFTService) consensusLoop() {
+	// Temporary until we enable the consensus logic
+	if !s.eth.AccountManager().Config().InsecureUnlockAllowed {
+		return
+	}
 	sequence := big.NewInt(0).Set(s.eth.BlockChain().CurrentHeader().Number)
 	for {
 		sequence.Add(sequence, big.NewInt(1))

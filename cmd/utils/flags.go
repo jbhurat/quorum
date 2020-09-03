@@ -858,6 +858,10 @@ var (
 		Usage: "Value will be passed to an account plugin if being used.  See the account plugin implementation's documentation for further details",
 	}
 	// Istanbul settings
+	IstanbulModeFlag = cli.BoolFlag{
+		Name:  "istanbulservice",
+		Usage: "If enabled, uses ibft registered as a service instead of Quorum Chain for consensus",
+	}
 	IstanbulRequestTimeoutFlag = cli.Uint64Flag{
 		Name:  "istanbul.requesttimeout",
 		Usage: "Timeout for each Istanbul round in milliseconds",
@@ -1838,22 +1842,15 @@ func RegisterPermissionService(stack *node.Node) {
 	}
 	log.Info("permission service registered")
 }
-// RegisterIBFTServiceIfEnabled registers IBFT Service
-// FIXME ethChan cannot be accessed outside of stack.Register() call, hence it returns an error when
-// IBFT is not defined, a solution to this approach could be to use a dummy service which does nothing
-// When IBFT consensus is not used (NotAnIBFTService)
-func RegisterIBFTServiceIfEnabled(stack *node.Node, ctx *cli.Context, ethChan chan *eth.Ethereum) {
+
+// RegisterIBFTService registers IBFT Service
+func RegisterIBFTService(stack *node.Node, ctx *cli.Context, ethChan chan *eth.Ethereum) {
 	if err := stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
 		ethereum := <-ethChan
 		ethChan <- ethereum
-		if _, ok := ethereum.Engine().(consensus.Istanbul); !ok {
-			log.Info("Not registering IBFT Service as IBFT Consensus is not used")
-			return nil, errors.New("IBFT consensus is not used")
-		}
-		log.Info("Node", "name", stack.Config().Name)
 		return ibft.NewIBFTService(ctx, ethereum)
 	}); err != nil {
-		log.Info("Failed to register the IBFT service: %v", err)
+		Fatalf("Failed to register the IBFT service: %v", err)
 	}
 
 }

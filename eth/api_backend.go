@@ -24,6 +24,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
+	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/bloombits"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -101,7 +102,8 @@ func (b *EthAPIBackend) HeaderByHash(ctx context.Context, hash common.Hash) (*ty
 func (b *EthAPIBackend) BlockByNumber(ctx context.Context, number rpc.BlockNumber) (*types.Block, error) {
 	// Pending block is only known by the miner
 	if number == rpc.PendingBlockNumber {
-		if b.eth.protocolManager.raftMode {
+		_, ibftOK := b.eth.Engine().(consensus.Istanbul)
+		if b.eth.protocolManager.raftMode || ibftOK {
 			// Use latest instead.
 			return b.eth.blockchain.CurrentBlock(), nil
 		}
@@ -144,7 +146,8 @@ func (b *EthAPIBackend) StateAndHeaderByNumber(ctx context.Context, number rpc.B
 	// Pending state is only known by the miner
 	if number == rpc.PendingBlockNumber {
 		// Quorum
-		if b.eth.protocolManager.raftMode {
+		_, ibftOK := b.eth.Engine().(consensus.Istanbul)
+		if b.eth.protocolManager.raftMode || ibftOK {
 			// Use latest instead.
 			header, err := b.HeaderByNumber(ctx, rpc.LatestBlockNumber)
 			if header == nil || err != nil {

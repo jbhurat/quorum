@@ -2,10 +2,12 @@ package ibft
 
 import (
 	"math/big"
+	"time"
 
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/eth"
 	"github.com/ethereum/go-ethereum/ibft/minter"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -25,7 +27,7 @@ func NewIBFTService(ctx *node.ServiceContext, eth *eth.Ethereum) (*IBFTService, 
 		eth:        eth,
 		ibftEngine: ibftEngine,
 		minter:     minter.New(eth, ibftEngine, ctx.NodeKey(), ctx.EventMux),
-		consensus: &FakeConsensus{},
+		consensus:  &FakeConsensus{},
 		stop:       make(chan struct{}),
 	}, nil
 }
@@ -57,10 +59,14 @@ func (s *IBFTService) consensusLoop() {
 	sequence := big.NewInt(0).Set(s.eth.BlockChain().CurrentHeader().Number)
 	for {
 		sequence.Add(sequence, big.NewInt(1))
+		executeTime := time.Now()
 		decision := s.consensus.Execute(sequence, s.minter)
 		select {
 		case block := <-decision:
+			log.Info("Execute Time", "block", sequence.Uint64(), "time", time.Since(executeTime))
+			applyTime := time.Now()
 			s.minter.Apply(block)
+			log.Info("Apply Time", "block", block.NumberU64(), "time", time.Since(applyTime))
 		case <-s.stop:
 			return
 		}

@@ -4,30 +4,27 @@ import (
 	"crypto/ecdsa"
 	"errors"
 	"fmt"
-	"github.com/ethereum/go-ethereum/core/rawdb"
 	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/rlp"
-
-	"github.com/ethereum/go-ethereum/consensus"
-	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/eth"
 	"github.com/ethereum/go-ethereum/event"
+	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/rlp"
 )
 
 type Minter struct {
-	mu		   sync.Mutex
+	mu         sync.Mutex
 	eth        *eth.Ethereum
 	ibftEngine consensus.Istanbul
-	txPreChan  chan core.NewTxsEvent
-	txPreSub   event.Subscription
 	nodeKey    *ecdsa.PrivateKey
 	request    chan chan<- *types.Block
 	eventMux   *event.TypeMux
@@ -39,25 +36,23 @@ func New(eth *eth.Ethereum, ibftEngine consensus.Istanbul, nodeKey *ecdsa.Privat
 	minter := &Minter{
 		eth:        eth,
 		ibftEngine: ibftEngine,
-		txPreChan:  make(chan core.NewTxsEvent, 4096),
 		nodeKey:    nodeKey,
-		request:   make(chan chan<- *types.Block),
+		request:    make(chan chan<- *types.Block),
 		eventMux:   eventMux,
 		stop:       make(chan struct{})}
 
-	minter.txPreSub = eth.TxPool().SubscribeNewTxsEvent(minter.txPreChan)
 	return minter
 }
 
 // Current state information for building the next block
 type work struct {
-	transactions *types.TransactionsByPriceAndNonce
-	publicState  *state.StateDB
-	privateState *state.StateDB
-	header       *types.Header
-	publicReceipts types.Receipts
+	transactions    *types.TransactionsByPriceAndNonce
+	publicState     *state.StateDB
+	privateState    *state.StateDB
+	header          *types.Header
+	publicReceipts  types.Receipts
 	privateReceipts types.Receipts
-	logs []*types.Log
+	logs            []*types.Log
 }
 
 func (m *Minter) createWork() *work {
@@ -104,7 +99,6 @@ func (m *Minter) getTransactions() *types.TransactionsByPriceAndNonce {
 }
 
 func (m *Minter) Close() {
-	m.txPreSub.Unsubscribe()
 	close(m.stop)
 }
 
@@ -112,21 +106,14 @@ func (m *Minter) RequestBlock() <-chan *types.Block {
 	m.mu.Lock()
 	proposal := make(chan *types.Block)
 	go func() {
-		for {
-			select {
-			case <-m.txPreChan:
-				block, err := m.createBlock()
-				if err != nil {
-					panic(err) // FIXME: proper error handling
-				}
-				proposal <- block
-				return
-			case err := <-m.txPreSub.Err():
-				panic(err)
-			case <-m.stop:
-				return
-			}
+		m.eth.TxPool().WaitForPendingTxns()
+		cbTime := time.Now()
+		block, err := m.createBlock()
+		if err != nil {
+			panic(err) // FIXME: proper error handling
 		}
+		proposal <- block
+		log.Info("createBlock time", "block", block.NumberU64(), "time", time.Since(cbTime))
 	}()
 	return proposal
 }
@@ -137,6 +124,7 @@ func (m *Minter) createBlock() (*types.Block, error) {
 
 	var committedTxs types.Transactions
 	committedTxs, work.publicReceipts, work.privateReceipts, work.logs = m.commitTransactions(work)
+	log.Info("Committed", "transactions", committedTxs.Len())
 
 	// commit state root after all state transitions.
 	work.header.Root = work.publicState.IntermediateRoot(m.eth.BlockChain().Config().IsEIP158(work.header.Number))
@@ -182,7 +170,7 @@ func (m *Minter) insertBlockAndUpdateState(block *types.Block) {
 	hash := block.Hash()
 	// Different block could share same sealhash, deep copy here to prevent write-write conflict.
 	var (
-		w = m.work
+		w           = m.work
 		pubReceipts = make([]*types.Receipt, len(w.publicReceipts))
 		prvReceipts = make([]*types.Receipt, len(w.privateReceipts))
 		logs        []*types.Log

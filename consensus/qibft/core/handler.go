@@ -17,6 +17,8 @@
 package core
 
 import (
+	"math/big"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/istanbul"
 )
@@ -39,9 +41,8 @@ func (c *core) Stop() error {
 	c.stopTimer()
 	c.unsubscribeEvents()
 
-	// Not waiting for handlerWg to stop, as it was blocking legacy IBFT consensus to stop
-	// and new events will be handled by qibft consensus
-	// c.handlerWg.Wait()
+	// Make sure the handler goroutine exits
+	c.handlerWg.Wait()
 	return nil
 }
 
@@ -88,7 +89,7 @@ func (c *core) handleEvents() {
 			// A real event arrived, process interesting content
 			switch ev := event.Data.(type) {
 			case istanbul.RequestEvent:
-				r := &istanbul.Request{
+				r := &Request{
 					Proposal: ev.Proposal,
 				}
 				err := c.handleRequest(r)
@@ -181,22 +182,11 @@ func (c *core) handleCheckedMsg(msg *message, src istanbul.Validator) error {
 }
 
 func (c *core) handleTimeoutMsg() {
-	// If we're not waiting for round change yet, we can try to catch up
-	// the max round with F+1 round change message. We only need to catch up
-	// if the max round is larger than current round.
-	if !c.waitingForRoundChange {
-		maxRound := c.roundChangeSet.MaxRound(c.valSet.F() + 1)
-		if maxRound != nil && maxRound.Cmp(c.current.Round()) > 0 {
-			c.sendRoundChange(maxRound)
-			return
-		}
-	}
+	// Start the new round
+	round := c.current.Round()
+	nextRound := new(big.Int).Add(round, common.Big1)
+	c.startNewRound(nextRound)
 
-	lastProposal, _ := c.backend.LastProposal()
-	if lastProposal != nil && lastProposal.Number().Cmp(c.current.Sequence()) >= 0 {
-		c.logger.Trace("round change timeout, catch up latest sequence", "number", lastProposal.Number().Uint64())
-		c.startNewRound(common.Big0)
-	} else {
-		c.sendNextRoundChange()
-	}
+	// Send Round Change
+	c.sendRoundChange(nextRound)
 }

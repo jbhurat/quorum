@@ -27,6 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/istanbul"
 	istanbulCore "github.com/ethereum/go-ethereum/consensus/istanbul/core"
 	"github.com/ethereum/go-ethereum/consensus/istanbul/validator"
+	qibftCore "github.com/ethereum/go-ethereum/consensus/qibft/core"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -61,7 +62,7 @@ func New(config *istanbul.Config, privateKey *ecdsa.PrivateKey, db ethdb.Databas
 		recentMessages:   recentMessages,
 		knownMessages:    knownMessages,
 	}
-	backend.core = istanbulCore.New(backend, backend.config)
+
 	return backend
 }
 
@@ -98,6 +99,8 @@ type backend struct {
 
 	recentMessages *lru.ARCCache // the cache of peer's messages
 	knownMessages  *lru.ARCCache // the cache of self messages
+
+	qibftConsensusEnabled bool // qibft consensus
 }
 
 // zekun: HACK
@@ -315,5 +318,46 @@ func (sb *backend) HasBadProposal(hash common.Hash) bool {
 }
 
 func (sb *backend) Close() error {
+	return nil
+}
+
+// IsQIBFTConsensus returns whether qbft consensus should be used
+func (sb *backend) IsQIBFTConsensus() bool {
+	// If qibftBlock is not defined in genesis, then use legacy ibft
+	if sb.config.QibftBlock == nil {
+		return false
+	}
+
+	if sb.qibftConsensusEnabled || sb.config.QibftBlock.Uint64() == 0 {
+		return true
+	}
+
+	if sb.chain != nil && sb.chain.CurrentHeader().Number.Cmp(sb.config.QibftBlock) >= 0 {
+		return true
+	}
+	return false
+}
+
+// StartQBFTConsensus stops existing legacy ibft consensus and starts the new qibft consensus
+func (sb *backend) StartQIBFTConsensus() error {
+	sb.logger.Trace("Starting QIBFT Consensus")
+	if err := sb.Stop(); err != nil {
+		return err
+	}
+	sb.logger.Trace("Stopped legacy IBFT consensus")
+	sb.coreMu.Lock()
+	defer sb.coreMu.Unlock()
+	// Set the core to qibft
+	sb.core = qibftCore.New(sb, sb.config)
+
+	sb.logger.Trace("Starting qibft")
+	if err := sb.core.Start(); err != nil {
+		return err
+	}
+
+	sb.logger.Trace("Started qibft consensus")
+	sb.coreStarted = true
+	sb.qibftConsensusEnabled = true
+
 	return nil
 }

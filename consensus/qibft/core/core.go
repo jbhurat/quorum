@@ -272,7 +272,9 @@ func (c *core) startNewRound(round *big.Int) {
 	}
 	c.roundChangeSet.NewRound(round)
 
-	c.newRoundChangeTimer()
+	if roundChange {
+		c.newRoundChangeTimer()
+	}
 
 	logger.Debug("New round", "new_round", newView.Round, "new_seq", newView.Sequence, "new_proposer", c.valSet.GetProposer(), "valSet", c.valSet.List(), "size", c.valSet.Size(), "IsProposer", c.IsProposer())
 }

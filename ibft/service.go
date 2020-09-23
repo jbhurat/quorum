@@ -1,7 +1,6 @@
 package ibft
 
 import (
-	"math/big"
 	"time"
 
 	"github.com/ethereum/go-ethereum/consensus"
@@ -61,18 +60,12 @@ func (s *IBFTService) Stop() error {
 }
 
 func (s *IBFTService) consensusLoop() {
-	// Temporary until we enable the consensus logic
-	if !s.eth.AccountManager().Config().InsecureUnlockAllowed {
-		return
-	}
-	sequence := big.NewInt(0).Set(s.eth.BlockChain().CurrentHeader().Number)
 	for {
-		sequence.Add(sequence, big.NewInt(1))
 		executeTime := time.Now()
 		decision := s.consensus.Execute(s.minter)
 		select {
 		case block := <-decision:
-			log.Info("Execute Time", "block", sequence.Uint64(), "time", time.Since(executeTime))
+			log.Info("Execute Time", "block", block.NumberU64(), "time", time.Since(executeTime))
 			applyTime := time.Now()
 			s.minter.Apply(block)
 			log.Info("Apply Time", "block", block.NumberU64(), "time", time.Since(applyTime))

@@ -27,7 +27,7 @@ func NewIBFTService(ctx *node.ServiceContext, eth *eth.Ethereum) (*IBFTService, 
 		eth:        eth,
 		ibftEngine: ibftEngine,
 		minter:     minter.New(eth, ibftEngine, ctx.NodeKey(), ctx.EventMux),
-		consensus:  &FakeConsensus{},
+		consensus:  NewIBFTConsensus(eth.BlockChain(), ibftEngine),
 		stop:       make(chan struct{}),
 	}, nil
 }
@@ -41,12 +41,21 @@ func (s *IBFTService) APIs() []rpc.API {
 }
 
 func (s *IBFTService) Start(server *p2p.Server) error {
+	err := s.ibftEngine.Start(
+		s.eth.BlockChain(),
+		s.eth.BlockChain().CurrentBlock,
+		s.eth.BlockChain().HasBadBlock)
+	if err != nil {
+		log.Crit("IBFT - Error starting consensus engine: %v", err)
+		panic(err)
+	}
 	go s.consensusLoop()
 	return nil
 }
 
 func (s *IBFTService) Stop() error {
 	s.minter.Close()
+	s.ibftEngine.Stop()
 	close(s.stop)
 	return nil
 }
@@ -60,7 +69,7 @@ func (s *IBFTService) consensusLoop() {
 	for {
 		sequence.Add(sequence, big.NewInt(1))
 		executeTime := time.Now()
-		decision := s.consensus.Execute(sequence, s.minter)
+		decision := s.consensus.Execute(s.minter)
 		select {
 		case block := <-decision:
 			log.Info("Execute Time", "block", sequence.Uint64(), "time", time.Since(executeTime))

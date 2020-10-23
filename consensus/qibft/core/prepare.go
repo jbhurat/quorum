@@ -35,9 +35,14 @@ func (c *core) sendPrepare() {
 		Code: msgPrepare,
 		Msg:  encodedSubject,
 	})
+	c.current.msgSent[msgPrepare] = true
 }
 
 func (c *core) handlePrepare(msg *message, src istanbul.Validator) error {
+	if c.current.msgSent[msgCommit] {
+		c.logger.Warn("Not handling prepare as commit message has already been sent")
+		return errOldMessage
+	}
 	// Decode PREPARE message
 	var prepare *Subject
 	err := msg.Decode(&prepare)
@@ -49,28 +54,37 @@ func (c *core) handlePrepare(msg *message, src istanbul.Validator) error {
 		return err
 	}
 
-	// If it is locked, it can only process on the locked block.
-	// Passing verifyPrepare and checkMessage implies it is processing on the locked block since it was verified in the Preprepared state.
-	if err := c.verifyPrepare(prepare, src); err != nil {
-		return err
-	}
-
 	c.acceptPrepare(msg, src)
 
 	// Change to Prepared state if we've received enough PREPARE messages
 	// and we are in earlier state before Prepared state.
-	if (c.current.GetPrepareOrCommitSize() >= c.QuorumSize()) && c.state.Cmp(StatePrepared) < 0 {
+	if (c.current.GetPrepareOrCommitSize() >= c.QuorumSize()) && c.VerifyPrepareMessages() {
 
 		// IBFT REDUX
 		c.current.preparedRound = c.currentView().Round
 		c.current.preparedBlock = prepare.Digest
 		c.PreparedRoundPrepares = c.current.Prepares
 
+		// Set the Proposal if it is nil or is from the previous sequence
+		if c.current.Proposal() == nil || c.current.Proposal().Number().Uint64() != prepare.View.Sequence.Uint64() {
+			c.current.setProposal(prepare.Digest)
+		}
+
 		c.setState(StatePrepared)
 		c.sendCommit()
 	}
 
 	return nil
+}
+
+// VerifyPrepareMessages returns true if all the prepare messages are identical
+func (c *core) VerifyPrepareMessages() bool {
+	c.logger.Trace("VerifyPrepareMessages()", "sequence", c.current.sequence.Uint64(), "round", c.current.round.Uint64())
+
+	if c.current.Prepares.Size() <= 1 {
+		return true
+	}
+	return c.current.verifyPrepareOrCommitMessages(c.current.Prepares)
 }
 
 // verifyPrepare verifies if the received PREPARE message is equivalent to our subject

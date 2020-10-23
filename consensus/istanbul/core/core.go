@@ -188,6 +188,11 @@ func (c *core) commit() {
 	}
 }
 
+// StartRoundZero starts round zero
+func (c *core) StartRoundZero() {
+	c.startNewRound(common.Big0)
+}
+
 // startNewRound starts a new round. if round equals to 0, it means to starts a new sequence
 func (c *core) startNewRound(round *big.Int) {
 	var logger log.Logger

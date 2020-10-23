@@ -60,6 +60,7 @@ func (c *core) sendPreprepare(request *Request) {
 			Msg:           preprepare,
 			PiggybackMsgs: piggybackMsgPayload,
 		})
+		c.current.msgSent[msgPreprepare] = true
 		// Set the preprepareSent to the current round
 		c.current.preprepareSent = curView.Round
 	}
@@ -67,6 +68,11 @@ func (c *core) sendPreprepare(request *Request) {
 
 func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 	logger := c.logger.New("from", src, "state", c.state)
+
+	if c.current.msgSent[msgPrepare] || c.current.msgSent[msgCommit] {
+		logger.Warn("Not handling preprepare as prepare or commit message has already been sent")
+		return errOldMessage
+	}
 
 	// Decode PRE-PREPARE
 	var preprepare *Preprepare

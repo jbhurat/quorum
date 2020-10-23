@@ -126,9 +126,6 @@ func (m *Minter) createBlock() (*types.Block, error) {
 	committedTxs, work.publicReceipts, work.privateReceipts, work.logs = m.commitTransactions(work)
 	log.Info("Committed", "transactions", committedTxs.Len())
 
-	// commit state root after all state transitions.
-	work.header.Root = work.publicState.IntermediateRoot(m.eth.BlockChain().Config().IsEIP158(work.header.Number))
-
 	// update block hash since it is now available, but was not when the
 	// receipt/log of individual transactions were created:
 	headerHash := work.header.Hash()
@@ -140,13 +137,7 @@ func (m *Minter) createBlock() (*types.Block, error) {
 	if err != nil {
 		return nil, err
 	}
-	sealHash := m.ibftEngine.SealHash(block.Header())
-	block, err = m.sealBlock(block, sealHash)
-	if err != nil {
-		return nil, err
-	}
-
-	m.eventMux.Post(core.NewMinedBlockEvent{Block: block})
+	m.ibftEngine.SealHash(block.Header())
 
 	elapsed := time.Since(time.Unix(0, int64(work.header.Time)))
 	log.Info("🔨  Mined block", "number", block.Number(), "hash", fmt.Sprintf("%x", block.Hash().Bytes()[:4]), "elapsed", elapsed)
@@ -155,13 +146,14 @@ func (m *Minter) createBlock() (*types.Block, error) {
 
 func (m *Minter) Apply(block *types.Block) error {
 	defer m.mu.Unlock()
-	m.insertBlockAndUpdateState(block)
 
-	// TODO State has been ignored in InsertBlockAndUpdateState, this will change based on State type
-	var events []interface{}
-	events = append(events, core.ChainEvent{Block: block, Hash: block.Hash(), Logs: m.work.logs})
-	events = append(events, core.ChainHeadEvent{Block: block})
-	m.eth.BlockChain().PostChainEvents(events, m.work.logs)
+	_, err := m.eth.BlockChain().InsertChain(types.Blocks{block})
+	if err != nil {
+		log.Error("block insertion failed", "block", block.Hash(), "number", block.NumberU64(), "err", err)
+		return err
+	}
+
+	m.eventMux.Post(core.NewMinedBlockEvent{Block: block})
 
 	return nil
 }
@@ -240,6 +232,7 @@ func (m *Minter) commitTransactions(work *work) (
 		}
 
 		work.publicState.Prepare(tx.Hash(), common.Hash{}, txCount)
+		work.privateState.Prepare(tx.Hash(), common.Hash{}, txCount)
 
 		publicReceipt, privateReceipt, err := m.commitTransaction(tx, work, gp)
 		switch {

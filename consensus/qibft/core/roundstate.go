@@ -19,7 +19,10 @@ package core
 import (
 	"io"
 	"math/big"
+	"reflect"
 	"sync"
+
+	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/istanbul"
@@ -38,6 +41,7 @@ func newRoundState(view *View, validatorSet istanbul.ValidatorSet, preprepare *P
 		pendingRequest: pendingRequest,
 		hasBadProposal: hasBadProposal,
 		preprepareSent: big.NewInt(0),
+		msgSent:        make(map[uint64]bool),
 	}
 }
 
@@ -57,6 +61,7 @@ type roundState struct {
 
 	// Keep track of preprepare sent messages
 	preprepareSent *big.Int
+	msgSent        map[uint64]bool
 }
 
 func (s *roundState) GetPrepareOrCommitSize() int {
@@ -72,6 +77,29 @@ func (s *roundState) GetPrepareOrCommitSize() int {
 		}
 	}
 	return result
+}
+
+func (s *roundState) verifyPrepareOrCommitMessages(msgSet *messageSet) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var firstPrepareMsg *Subject
+	for k, msg := range msgSet.Values() {
+		var decodedMsg *Subject
+		err := msg.Decode(&decodedMsg)
+		if err != nil {
+			log.Error("Unable to decode prepare message", "err", err)
+			return false
+		}
+		if k == 0 {
+			firstPrepareMsg = decodedMsg
+		} else if !reflect.DeepEqual(decodedMsg.View, firstPrepareMsg.View) || decodedMsg.Digest.Hash().Hex() != firstPrepareMsg.Digest.Hash().Hex() {
+			log.Warn("Inconsistent subjects between prepare messages", "expected", firstPrepareMsg, "got", decodedMsg)
+			return false
+		}
+	}
+	log.Trace("verifyPrepareOrCommitMessages() returning true", "sequence", s.sequence.Uint64(), "round", s.round.Uint64())
+	return true
 }
 
 func (s *roundState) Subject() *Subject {
@@ -96,6 +124,15 @@ func (s *roundState) SetPreprepare(preprepare *Preprepare) {
 	defer s.mu.Unlock()
 
 	s.Preprepare = preprepare
+}
+
+func (s *roundState) setProposal(proposal istanbul.Proposal) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.Preprepare = &Preprepare{
+		Proposal: proposal,
+	}
 }
 
 func (s *roundState) Proposal() istanbul.Proposal {

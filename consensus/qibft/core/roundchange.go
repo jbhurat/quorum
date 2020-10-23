@@ -17,6 +17,7 @@
 package core
 
 import (
+	"errors"
 	"math/big"
 	"sort"
 	"sync"
@@ -53,7 +54,6 @@ func (c *core) sendRoundChange(round *big.Int) {
 	if preparedBlock == nil {
 		preparedBlock = NilBlock()
 	}
-	cv = c.currentView()
 	rc := &RoundChangeMessage{
 		View:          cv,
 		PreparedRound: c.current.preparedRound,
@@ -135,7 +135,12 @@ func (c *core) handleRoundChange(msg *message, src istanbul.Validator) error {
 	} else if currentRoundMessages >= c.QuorumSize() && c.IsProposer() && c.current.preprepareSent.Cmp(cv.Round) < 0 {
 		_, proposal := c.highestPrepared(cv.Round)
 		if proposal == nil {
-			proposal = c.current.pendingRequest.Proposal
+			if c.current.pendingRequest != nil {
+				proposal = c.current.pendingRequest.Proposal
+			} else {
+				c.logger.Error("proposal not set", "sequence", cv.Sequence.Uint64(), "round", cv.Round.Uint64())
+				return errors.New("proposal not set")
+			}
 		}
 
 		roundChangeMessages := c.roundChangeSet.roundChanges[cv.Round.Uint64()]

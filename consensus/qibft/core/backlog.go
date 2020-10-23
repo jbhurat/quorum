@@ -57,15 +57,6 @@ func (c *core) checkMessage(msgCode uint64, view *View) error {
 		return errOldMessage
 	}
 
-	// StateAcceptRequest only accepts msgPreprepare
-	// other messages are future messages
-	if c.state == StateAcceptRequest {
-		if msgCode > msgPreprepare {
-			return errFutureMessage
-		}
-		return nil
-	}
-
 	// For states(StatePreprepared, StatePrepared, StateCommitted),
 	// can accept all message types if processing with same view
 	return nil

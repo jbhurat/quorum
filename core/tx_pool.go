@@ -1458,9 +1458,7 @@ func (pool *TxPool) demoteUnexecutables() {
 // WaitForPendingTxns waits on ptxCond and unlocks when a broadcast message is sent on ptxCond
 func (pool *TxPool) WaitForPendingTxns() {
 	pool.ptxCond.L.Lock()
-	for len(pool.pending) == 0 {
-		pool.ptxCond.Wait()
-	}
+	pool.ptxCond.Wait()
 	pool.ptxCond.L.Unlock()
 }
 

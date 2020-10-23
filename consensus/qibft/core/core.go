@@ -47,6 +47,7 @@ func New(backend istanbul.Backend, config *istanbul.Config) Engine {
 		pendingRequests:    prque.New(),
 		pendingRequestsMu:  new(sync.Mutex),
 		consensusTimestamp: time.Time{},
+		committedBlock:     make(map[uint64]bool),
 		roundMeter:         metrics.NewMeter(),
 		sequenceMeter:      metrics.NewMeter(),
 		consensusTimer:     metrics.NewTimer(),
@@ -96,6 +97,8 @@ type core struct {
 	roundChangeTimer *time.Timer
 
 	PreparedRoundPrepares *messageSet
+
+	committedBlock map[uint64]bool
 
 	pendingRequests   *prque.Prque
 	pendingRequestsMu *sync.Mutex
@@ -195,6 +198,11 @@ func (c *core) commit() {
 			return
 		}
 	}
+}
+
+// StartRoundZero starts round zero
+func (c *core) StartRoundZero() {
+	c.startNewRound(common.Big0)
 }
 
 // startNewRound starts a new round. if round equals to 0, it means to starts a new sequence

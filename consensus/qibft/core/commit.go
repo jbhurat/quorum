@@ -17,6 +17,7 @@
 package core
 
 import (
+	"math/big"
 	"reflect"
 
 	"github.com/ethereum/go-ethereum/consensus/istanbul"
@@ -47,6 +48,7 @@ func (c *core) broadcastCommit(sub *Subject) {
 		Code: msgCommit,
 		Msg:  encodedSubject,
 	})
+	c.current.msgSent[msgCommit] = true
 }
 
 func (c *core) handleCommit(msg *message, src istanbul.Validator) error {
@@ -61,21 +63,36 @@ func (c *core) handleCommit(msg *message, src istanbul.Validator) error {
 		return err
 	}
 
-	if err := c.verifyCommit(commit, src); err != nil {
-		return err
-	}
-
 	c.acceptCommit(msg, src)
 
 	// Commit the proposal once we have enough COMMIT messages and we are not in the Committed state.
 	//
 	// If we already have a proposal, we may have chance to speed up the consensus process
 	// by committing the proposal without PREPARE messages.
-	if c.current.Commits.Size() >= c.QuorumSize() && c.state.Cmp(StateCommitted) < 0 {
-		c.commit()
+	if c.current.Commits.Size() >= c.QuorumSize() && c.VerifyCommitMessages() {
+		if c.current.Proposal() == nil || c.current.Proposal().Number().Uint64() != commit.View.Sequence.Uint64() {
+			c.current.setProposal(commit.Digest)
+		}
+
+		// If Commit is not set or if it from the previous block
+		if !(commit.View.Sequence.Uint64() < c.current.sequence.Uint64()) && !c.committedBlock[commit.View.Sequence.Uint64()] {
+			c.updateCommittedBlockMap(commit.View.Sequence)
+			c.commit()
+		} else {
+			c.logger.Trace("Not committing block as it is either from previous sequence or already committed for this sequence")
+		}
 	}
 
 	return nil
+}
+
+// VerifyCommitMessages returns true if all the commit messages are identical
+func (c *core) VerifyCommitMessages() bool {
+	c.logger.Trace("VerifyCommitMessages()", "sequence", c.current.sequence.Uint64(), "round", c.current.round.Uint64())
+	if c.current.Commits.Size() <= 1 {
+		return true
+	}
+	return c.current.verifyPrepareOrCommitMessages(c.current.Commits)
 }
 
 // verifyCommit verifies if the received COMMIT message is equivalent to our subject
@@ -101,4 +118,12 @@ func (c *core) acceptCommit(msg *message, src istanbul.Validator) error {
 	}
 
 	return nil
+}
+
+func (c *core) updateCommittedBlockMap(sequence *big.Int) {
+	c.logger.Trace("UpdateCommitedBlockMap", "sequence", sequence.Uint64())
+	for k := range c.committedBlock {
+		delete(c.committedBlock, k)
+	}
+	c.committedBlock[sequence.Uint64()] = true
 }

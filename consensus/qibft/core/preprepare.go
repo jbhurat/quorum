@@ -69,26 +69,12 @@ func (c *core) sendPreprepare(request *Request) {
 func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 	logger := c.logger.New("from", src, "state", c.state)
 
-	if c.current.msgSent[msgPrepare] || c.current.msgSent[msgCommit] {
-		logger.Warn("Not handling preprepare as prepare or commit message has already been sent")
-		return errOldMessage
-	}
-
 	// Decode PRE-PREPARE
 	var preprepare *Preprepare
 	err := msg.Decode(&preprepare)
 	if err != nil {
 		logger.Debug("Failed to decode preprepare message", "err", err)
 		return errFailedDecodePreprepare
-	}
-
-	// Decode messages that piggyback Preprepare message
-	var piggyBackMsgs *PiggybackMessages
-	if msg.PiggybackMsgs != nil && len(msg.PiggybackMsgs) > 0 {
-		if err := rlp.DecodeBytes(msg.PiggybackMsgs, &piggyBackMsgs); err != nil {
-			logger.Error("Failed to decode messages that piggyback Preprepare messages", "err", err)
-			return errFailedDecodePiggybackMsgs
-		}
 	}
 
 	// Ensure we have the same view with the PRE-PREPARE message
@@ -108,6 +94,21 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 			}
 		}
 		return err
+	}
+
+	// If the node has already  sent a prepare or commit message, then no need to handle preprepare message
+	if c.current.msgSent[msgPrepare] || c.current.msgSent[msgCommit] {
+		logger.Debug("Not handling preprepare as prepare or commit message has already been sent")
+		return errOldMessage
+	}
+
+	// Decode messages that piggyback Preprepare message
+	var piggyBackMsgs *PiggybackMessages
+	if msg.PiggybackMsgs != nil && len(msg.PiggybackMsgs) > 0 {
+		if err := rlp.DecodeBytes(msg.PiggybackMsgs, &piggyBackMsgs); err != nil {
+			logger.Error("Failed to decode messages that piggyback Preprepare messages", "err", err)
+			return errFailedDecodePiggybackMsgs
+		}
 	}
 
 	// Check if the message comes from current proposer

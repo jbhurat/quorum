@@ -31,6 +31,7 @@ func (c *core) sendPrepare() {
 		logger.Error("Failed to encode", "subject", sub)
 		return
 	}
+
 	c.broadcast(&message{
 		Code: msgPrepare,
 		Msg:  encodedSubject,
@@ -39,10 +40,6 @@ func (c *core) sendPrepare() {
 }
 
 func (c *core) handlePrepare(msg *message, src istanbul.Validator) error {
-	if c.current.msgSent[msgCommit] {
-		c.logger.Warn("Not handling prepare as commit message has already been sent")
-		return errOldMessage
-	}
 	// Decode PREPARE message
 	var prepare *Subject
 	err := msg.Decode(&prepare)
@@ -52,6 +49,12 @@ func (c *core) handlePrepare(msg *message, src istanbul.Validator) error {
 
 	if err := c.checkMessage(msgPrepare, prepare.View); err != nil {
 		return err
+	}
+
+	// If the node has already sent a commit message, then no need to handle prepare message
+	if c.current.msgSent[msgCommit] {
+		c.logger.Debug("Not handling prepare as commit message has already been sent")
+		return errOldMessage
 	}
 
 	c.acceptPrepare(msg, src)

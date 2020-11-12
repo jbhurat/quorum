@@ -26,9 +26,11 @@ func (c *core) handleRequest(request *Request) error {
 		if err == errInvalidMessage {
 			logger.Warn("invalid request")
 			return err
+		} else if err != errOldMessage {
+			logger.Warn("unexpected request", "err", err, "number", request.Proposal.Number(), "hash", request.Proposal.Hash())
+			return err
 		}
-		logger.Warn("unexpected request", "err", err, "number", request.Proposal.Number(), "hash", request.Proposal.Hash())
-		return err
+		logger.Warn("proposal from previous sequence", "number", request.Proposal.Number(), "hash", request.Proposal.Hash())
 	}
 	logger.Trace("handleRequest", "number", request.Proposal.Number(), "hash", request.Proposal.Hash())
 

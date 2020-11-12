@@ -43,6 +43,7 @@ func (c *core) sendRoundChange(round *big.Int) {
 		logger.Error("Cannot send out the round change", "current round", cv.Round, "target round", round)
 		return
 	}
+	cv.Round = round
 
 	// Now we have the new round number and sequence number
 	prepares := c.PreparedRoundPrepares
@@ -192,8 +193,12 @@ func (rcs *roundChangeSet) NewRound(r *big.Int) {
 	rcs.mu.Lock()
 	defer rcs.mu.Unlock()
 	round := r.Uint64()
-	rcs.roundChanges[round] = newMessageSet(rcs.validatorSet)
-	rcs.prepareMessages[round] = newMessageSet(rcs.validatorSet)
+	if rcs.roundChanges[round] == nil {
+		rcs.roundChanges[round] = newMessageSet(rcs.validatorSet)
+	}
+	if rcs.prepareMessages[round] == nil {
+		rcs.prepareMessages[round] = newMessageSet(rcs.validatorSet)
+	}
 }
 
 // Add adds the round and message into round change set

@@ -77,8 +77,8 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 		return errFailedDecodePreprepare
 	}
 
-	if preprepare.Proposal.Number().Uint64() < c.currentView().Sequence.Uint64() && c.current.Round().Uint64() == 0 {
-		logger.Trace("got a old message sending round change","proposal sequence", preprepare.Proposal.Number(), "current sequence", c.current.sequence)
+	if preprepare.Proposal.Number().Uint64() < c.currentView().Sequence.Uint64() {
+		logger.Trace("got a old message sending round change", "proposal sequence", preprepare.Proposal.Number(), "current sequence", c.current.sequence)
 		c.sendNextRoundChange()
 		return errOldMessage
 	}
@@ -145,12 +145,10 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 	}
 
 	// Here is about to accept the PRE-PREPARE
-	if c.state == StateAcceptRequest {
-		c.newRoundChangeTimer()
-		c.acceptPreprepare(preprepare)
-		c.setState(StatePreprepared)
-		c.sendPrepare()
-	}
+	c.newRoundChangeTimer()
+	c.acceptPreprepare(preprepare)
+	c.setState(StatePreprepared)
+	c.sendPrepare()
 
 	return nil
 }

@@ -4,7 +4,9 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/eth"
+	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/ibft/minter"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/node"
@@ -13,22 +15,27 @@ import (
 )
 
 type IBFTService struct {
-	eth        *eth.Ethereum
-	ibftEngine consensus.Istanbul
-	stop       chan struct{}
-	minter     *minter.Minter
-	consensus  Consensus
+	eth           *eth.Ethereum
+	ibftEngine    consensus.Istanbul
+	stop          chan struct{}
+	minter        *minter.Minter
+	consensus     Consensus
+	chainHeadChan chan core.ChainHeadEvent
+	chainHeadSub  event.Subscription
 }
 
 func NewIBFTService(ctx *node.ServiceContext, eth *eth.Ethereum) (*IBFTService, error) {
 	ibftEngine := eth.Engine().(consensus.Istanbul)
-	return &IBFTService{
-		eth:        eth,
-		ibftEngine: ibftEngine,
-		minter:     minter.New(eth, ibftEngine, ctx.NodeKey(), ctx.EventMux),
-		consensus:  NewIBFTConsensus(eth.BlockChain(), ibftEngine),
-		stop:       make(chan struct{}),
-	}, nil
+	service := &IBFTService{
+		eth:           eth,
+		ibftEngine:    ibftEngine,
+		minter:        minter.New(eth, ibftEngine, ctx.NodeKey(), ctx.EventMux),
+		consensus:     NewIBFTConsensus(eth.BlockChain(), ibftEngine),
+		stop:          make(chan struct{}),
+		chainHeadChan: make(chan core.ChainHeadEvent, core.GetChainHeadChannleSize()),
+	}
+	service.chainHeadSub = eth.BlockChain().SubscribeChainHeadEvent(service.chainHeadChan)
+	return service, nil
 }
 
 func (s *IBFTService) Protocols() []p2p.Protocol {
@@ -49,6 +56,7 @@ func (s *IBFTService) Start(server *p2p.Server) error {
 		panic(err)
 	}
 	go s.consensusLoop()
+	go s.eventLoop()
 	return nil
 }
 
@@ -57,6 +65,24 @@ func (s *IBFTService) Stop() error {
 	s.ibftEngine.Stop()
 	close(s.stop)
 	return nil
+}
+
+func (s *IBFTService) eventLoop() {
+	defer s.chainHeadSub.Unsubscribe()
+	for {
+		select {
+		case <-s.chainHeadChan:
+			if handler, ok := s.ibftEngine.(consensus.Handler); ok {
+				log.Trace("handling NewChainHead()")
+				handler.NewChainHead()
+			}
+
+		// system stopped
+		case <-s.chainHeadSub.Err():
+			return
+
+		}
+	}
 }
 
 func (s *IBFTService) consensusLoop() {

@@ -477,6 +477,7 @@ func (sb *backend) Seal(chain consensus.ChainReader, block *types.Block, results
 			sb.proposedBlockHash = common.Hash{}
 			sb.sealMu.Unlock()
 		}()
+		sb.logger.Trace("Submitting block for sealing", "number", block.Number(), "hash", block.Hash())
 		// post block into Istanbul engine
 		go sb.EventMux().Post(istanbul.RequestEvent{
 			Proposal: block,

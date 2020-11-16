@@ -185,6 +185,7 @@ func (c *core) handleTimeoutMsg() {
 	// Start the new round
 	round := c.current.Round()
 	nextRound := new(big.Int).Add(round, common.Big1)
+	c.logger.Trace("Starting Roundchange message due to handleTimeoutMsg")
 	c.startNewRound(nextRound)
 
 	// Send Round Change

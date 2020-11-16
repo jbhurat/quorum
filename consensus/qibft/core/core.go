@@ -281,6 +281,7 @@ func (c *core) startNewRound(round *big.Int) {
 	c.roundChangeSet.NewRound(round)
 
 	if roundChange {
+		c.logger.Trace("calling newRoundChangeTimer from startNewRound")
 		c.newRoundChangeTimer()
 	}
 

@@ -102,6 +102,8 @@ func (c *core) handleRoundChange(msg *message, src istanbul.Validator) error {
 		}
 	}
 
+	c.logger.Trace("handleRoundChange", "sequence", c.current.Sequence(), "round", c.current.Round(), "from", msg.Address)
+
 	if err := c.checkMessage(msgRoundChange, rc.View); err != nil {
 		return err
 	}
@@ -128,9 +130,10 @@ func (c *core) handleRoundChange(msg *message, src istanbul.Validator) error {
 
 	num := c.roundChangeSet.higherRoundMessages(cv.Round)
 	currentRoundMessages := c.roundChangeSet.getRCMessagesForGivenRound(cv.Round)
+	c.logger.Trace("Inside handleRoundChange", "current round", cv.Round, "message round", roundView.Round, "num", num, "currentRoundMessages", currentRoundMessages)
 	if num == c.valSet.F()+1 {
 		newRound := c.roundChangeSet.getMinRoundChange(cv.Round)
-		logger.Trace("Starting new Round", "round", newRound)
+		logger.Trace("Starting new Round as F + 1 roundchange messages are received", "round", newRound)
 		c.startNewRound(newRound)
 		c.sendRoundChange(newRound)
 	} else if currentRoundMessages >= c.QuorumSize() && c.IsProposer() && c.current.preprepareSent.Cmp(cv.Round) < 0 {

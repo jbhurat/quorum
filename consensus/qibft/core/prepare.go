@@ -32,6 +32,7 @@ func (c *core) sendPrepare() {
 		return
 	}
 
+	c.logger.Trace("broadcast prepare", "sequence", c.current.Sequence(), "round", c.current.Round(), "hash", sub.Digest.Hash())
 	c.broadcast(&message{
 		Code: msgPrepare,
 		Msg:  encodedSubject,
@@ -46,6 +47,8 @@ func (c *core) handlePrepare(msg *message, src istanbul.Validator) error {
 	if err != nil {
 		return errFailedDecodePrepare
 	}
+
+	c.logger.Trace("handlePrepare", "sequence", c.current.Sequence(), "round", c.current.Round(), "from", msg.Address, "hash", prepare.Digest.Hash)
 
 	if err := c.checkMessage(msgPrepare, prepare.View); err != nil {
 		return err

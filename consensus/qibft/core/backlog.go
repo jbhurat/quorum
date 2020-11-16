@@ -44,6 +44,7 @@ func (c *core) checkMessage(msgCode uint64, view *View) error {
 		if view.Sequence.Cmp(c.currentView().Sequence) > 0 {
 			return errFutureMessage
 		} else if view.Cmp(c.currentView()) < 0 {
+			c.logger.Trace("checkMessage returning errOldMessage", "msgcode", msgCode, "current sequence", c.currentView().Sequence, "current round", c.currentView().Round, "message sequence", view.Sequence, "message round", view.Round)
 			return errOldMessage
 		}
 		return nil
@@ -54,6 +55,7 @@ func (c *core) checkMessage(msgCode uint64, view *View) error {
 	}
 
 	if view.Cmp(c.currentView()) < 0 {
+		c.logger.Trace("checkMessage returning errOldMessage", "msgcode", msgCode, "current sequence", c.currentView().Sequence, "current round", c.currentView().Round, "message sequence", view.Sequence, "message round", view.Round)
 		return errOldMessage
 	}
 

@@ -29,6 +29,7 @@ func (c *core) sendCommit() {
 }
 
 func (c *core) sendCommitForOldBlock(view *View, digest istanbul.Proposal) {
+	c.logger.Trace("sendCommitForOldBlock", "Sequence", view.Sequence, "Round", view.Round, "hash", digest.Hash())
 	sub := &Subject{
 		View:   view,
 		Digest: digest,
@@ -44,6 +45,7 @@ func (c *core) broadcastCommit(sub *Subject) {
 		logger.Error("Failed to encode", "subject", sub)
 		return
 	}
+	c.logger.Trace("broadcast commit", "sequence", c.current.Sequence(), "round", c.current.Round(), "hash", sub.Digest.Hash())
 	c.broadcast(&message{
 		Code: msgCommit,
 		Msg:  encodedSubject,
@@ -58,6 +60,8 @@ func (c *core) handleCommit(msg *message, src istanbul.Validator) error {
 	if err != nil {
 		return errFailedDecodeCommit
 	}
+
+	c.logger.Trace("handleCommit", "sequence", c.current.Sequence(), "round", c.current.Round(), "from", msg.Address, "hash", commit.Digest.Hash())
 
 	if err := c.checkMessage(msgCommit, commit.View); err != nil {
 		return err

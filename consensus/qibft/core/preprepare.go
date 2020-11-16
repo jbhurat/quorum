@@ -55,6 +55,7 @@ func (c *core) sendPreprepare(request *Request) {
 			return
 		}
 
+		c.logger.Trace("broadcast preprepare", "sequence", c.current.Sequence(), "round", c.current.Round(), "hash", request.Proposal.Hash())
 		c.broadcast(&message{
 			Code:          msgPreprepare,
 			Msg:           preprepare,
@@ -82,6 +83,8 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 		c.sendNextRoundChange()
 		return errOldMessage
 	}
+
+	c.logger.Trace("handlePreprepare", "sequence", c.current.Sequence(), "round", c.current.Round(), "from", msg.Address, "hash", preprepare.Proposal.Hash())
 
 	// Ensure we have the same view with the PRE-PREPARE message
 	// If it is old message, see if we need to broadcast COMMIT
@@ -145,6 +148,7 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 	}
 
 	// Here is about to accept the PRE-PREPARE
+	c.logger.Trace("calling newRoundChangeTimer from handlePreprepare")
 	c.newRoundChangeTimer()
 	c.acceptPreprepare(preprepare)
 	c.setState(StatePreprepared)
@@ -155,5 +159,6 @@ func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 
 func (c *core) acceptPreprepare(preprepare *Preprepare) {
 	c.consensusTimestamp = time.Now()
+	c.logger.Trace("Accepting Preprepare", "number", preprepare.Proposal.Number(), "hash", preprepare.Proposal.Hash())
 	c.current.SetPreprepare(preprepare)
 }

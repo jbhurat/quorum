@@ -36,6 +36,7 @@ func (c *core) handleRequest(request *Request) error {
 
 	c.current.pendingRequest = request
 	c.sendPreprepare(request)
+	c.logger.Trace("calling newRoundChangeTimer from handleRequest")
 	c.newRoundChangeTimer()
 
 	return nil

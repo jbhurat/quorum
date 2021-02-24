@@ -69,8 +69,6 @@ func (pm *ProtocolManager) makeQuorumConsensusProtocol(ProtoName string, version
 				}
 				p.Log().Error("consensus subprotocol retrieved nil eth peer from peerset", "ethPeer.id", ethPeer)
 				return errEthPeerNil
-			case <-p.EthPeerDisconnected:
-				return errEthPeerNotRegistered
 			}
 		},
 		NodeInfo: func() interface{} {

@@ -339,7 +339,7 @@ func HasHeader(db ethdb.Reader, hash common.Hash, number uint64) bool {
 func ReadHeader(db ethdb.Reader, hash common.Hash, number uint64) *types.Header {
 	_, header := readHeaderRLP(db, hash, number)
 	if header == nil {
-		log.Error("Invalid block header RLP", "hash", hash)
+		log.Trace("header not found in ancient or level db", "hash", hash)
 		return nil
 	}
 	return header

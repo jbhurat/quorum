@@ -337,6 +337,13 @@ func (c *core) newRoundChangeTimer() {
 	if round > 0 {
 		timeout += time.Duration(math.Pow(2, float64(round))) * time.Second
 	}
+	if c.config.MaxRoundChangeTimeout > 0 {
+		maxRCTimeoutFloat := float64(c.config.MaxRoundChangeTimeout)
+		if timeout.Seconds() > maxRCTimeoutFloat {
+			timeout = time.Duration(maxRCTimeoutFloat) * time.Second
+		}
+	}
+
 	c.roundChangeTimer = time.AfterFunc(timeout, func() {
 		c.sendEvent(timeoutEvent{})
 	})

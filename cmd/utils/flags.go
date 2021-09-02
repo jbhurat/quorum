@@ -847,6 +847,11 @@ var (
 		Usage: "Default minimum difference between two consecutive block's timestamps in seconds",
 		Value: eth.DefaultConfig.Istanbul.BlockPeriod,
 	}
+	IstanbulMaxRoundChangeTimeoutFlag = cli.Uint64Flag{
+		Name:  "istanbul.maxroundchangetimeout",
+		Usage: "Maximum amount of time in seconds before a Round expires. If set to 0, then the round change timer will increase exponentially with every round",
+		Value: eth.DefaultConfig.Istanbul.MaxRoundChangeTimeout,
+	}
 	// Multitenancy setting
 	MultitenancyFlag = cli.BoolFlag{
 		Name:  "multitenancy",
@@ -1704,6 +1709,9 @@ func setIstanbul(ctx *cli.Context, cfg *eth.Config) {
 	}
 	if ctx.GlobalIsSet(IstanbulBlockPeriodFlag.Name) {
 		cfg.Istanbul.BlockPeriod = ctx.GlobalUint64(IstanbulBlockPeriodFlag.Name)
+	}
+	if ctx.GlobalIsSet(IstanbulMaxRoundChangeTimeoutFlag.Name) {
+		cfg.Istanbul.MaxRoundChangeTimeout = ctx.GlobalUint64(IstanbulMaxRoundChangeTimeoutFlag.Name)
 	}
 }
 

@@ -301,6 +301,7 @@ var AppHelpFlagGroups = []flags.FlagGroup{
 		Flags: []cli.Flag{
 			utils.IstanbulRequestTimeoutFlag,
 			utils.IstanbulBlockPeriodFlag,
+			utils.IstanbulMaxRoundChangeTimeoutFlag,
 		},
 	},
 	// END QUORUM

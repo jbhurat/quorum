@@ -184,6 +184,8 @@ func TestQuorumConfigFlags(t *testing.T) {
 	assert.NoError(t, arbitraryCLIContext.GlobalSet(IstanbulRequestTimeoutFlag.Name, "23"))
 	fs.Uint64(IstanbulBlockPeriodFlag.Name, 0, "")
 	assert.NoError(t, arbitraryCLIContext.GlobalSet(IstanbulBlockPeriodFlag.Name, "34"))
+	fs.Uint64(IstanbulMaxRoundChangeTimeoutFlag.Name, 0, "")
+	assert.NoError(t, arbitraryCLIContext.GlobalSet(IstanbulMaxRoundChangeTimeoutFlag.Name, "45"))
 	fs.Bool(RaftModeFlag.Name, false, "")
 	assert.NoError(t, arbitraryCLIContext.GlobalSet(RaftModeFlag.Name, "true"))
 	fs.String(PrivateCacheTrieJournalFlag.Name, "", "")

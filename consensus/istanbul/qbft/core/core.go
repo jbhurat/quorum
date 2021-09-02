@@ -257,6 +257,13 @@ func (c *core) newRoundChangeTimer() {
 
 	timeout := baseTimeout * time.Duration(math.Pow(2, float64(round)))
 
+	if c.config.MaxRoundChangeTimeout > 0 {
+		maxRCTimeoutFloat := float64(c.config.MaxRoundChangeTimeout)
+		if timeout.Seconds() > maxRCTimeoutFloat {
+			timeout = time.Duration(maxRCTimeoutFloat) * time.Second
+		}
+	}
+
 	c.currentLogger(true, nil).Trace("QBFT: start new ROUND-CHANGE timer", "timeout", timeout.Seconds())
 	c.roundChangeTimer = time.AfterFunc(timeout, func() {
 		c.sendEvent(timeoutEvent{})

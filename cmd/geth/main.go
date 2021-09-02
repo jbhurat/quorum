@@ -174,6 +174,7 @@ var (
 		utils.EmitCheckpointsFlag,
 		utils.IstanbulRequestTimeoutFlag,
 		utils.IstanbulBlockPeriodFlag,
+		utils.IstanbulMaxRoundChangeTimeoutFlag,
 		utils.PluginSettingsFlag,
 		utils.PluginSkipVerifyFlag,
 		utils.PluginLocalVerifyFlag,

@@ -173,6 +173,7 @@ var (
 		utils.RaftPortFlag,
 		utils.RaftDNSEnabledFlag,
 		utils.EmitCheckpointsFlag,
+		utils.IstanbulModeFlag,
 		utils.IstanbulRequestTimeoutFlag,
 		utils.IstanbulBlockPeriodFlag,
 		utils.PluginSettingsFlag,

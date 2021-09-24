@@ -488,6 +488,10 @@ func (s *Ethereum) SetEtherbase(etherbase common.Address) {
 	s.miner.SetEtherbase(etherbase)
 }
 
+func (s *Ethereum) AcceptTxs() {
+	atomic.StoreUint32(&s.protocolManager.acceptTxs, 1)
+}
+
 // StartMining starts the miner with the given number of CPU threads. If mining
 // is already running, this method adjust the number of threads allowed to use
 // and updates the minimum price required by the transaction pool.

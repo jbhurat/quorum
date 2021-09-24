@@ -197,44 +197,62 @@ func (sb *Backend) Seal(chain consensus.ChainHeaderReader, block *types.Block, r
 		return err
 	}
 
-	delay := time.Until(time.Unix(int64(block.Header().Time), 0))
+	// delay := time.Until(time.Unix(int64(block.Header().Time), 0))
+	delay := 0 * time.Millisecond
 
 	go func() {
+		log.Info("IBFT: ->async backend#Seal")
 		// wait for the timestamp of header, use this to adjust the block period
 		select {
 		case <-time.After(delay):
+			log.Info("IBFT: async backend#Seal - time.After matched")
 		case <-stop:
-			results <- nil
+			log.Info("IBFT: async backend#Seal - DATA IN STOP CHANNEL, returning")
+			// results <- nil
 			return
 		}
 
 		// get the proposed block hash and clear it if the seal() is completed.
+		log.Info("IBFT: async backend#Seal - obtaining lock on sealMu")
 		sb.sealMu.Lock()
+		log.Info("IBFT: async backend#Seal - got lock on sealMu")
 		sb.proposedBlockHash = block.Hash()
 
 		defer func() {
 			sb.proposedBlockHash = common.Hash{}
+			log.Info("IBFT: async backend#Seal - releasing lock on sealMu")
 			sb.sealMu.Unlock()
 		}()
 		// post block into Istanbul engine
+		log.Info("IBFT: async backend#Seal - posting RequestEvent")
 		go sb.EventMux().Post(istanbul.RequestEvent{
 			Proposal: block,
 		})
 		for {
 			select {
 			case result := <-sb.commitCh:
+				log.Info("IBFT: async backend#Seal - got decision! Sending to results channel")
 				// if the block hash and the hash from channel are the same,
 				// return the result. Otherwise, keep waiting the next hash.
-				if result != nil && block.Hash() == result.Hash() {
+				if result != nil && block.Number().Cmp(result.Number()) == 0 {
 					results <- result
 					return
 				}
+				res := "nil"
+				if result != nil {
+					res = result.Number().String()
+				}
+				log.Info("IBFT: async backend#Seal - something is wrong with the result", "sequence", block.Number(), "result", res)
 			case <-stop:
-				results <- nil
+				log.Info("IBFT: async backend#Seal - got stop signal instead of decision!")
+				//log.Info("IBFT: async backend#Seal - sending nil to results channel")
+				//results <- nil
+				//log.Info("IBFT: async backend#Seal - done sending to results channel")
 				return
 			}
 		}
 	}()
+	log.Info("IBFT - backend#Seal->")
 	return nil
 }
 

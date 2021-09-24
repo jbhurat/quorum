@@ -264,6 +264,7 @@ type TxPool struct {
 	reorgDoneCh     chan chan struct{}
 	reorgShutdownCh chan struct{}  // requests shutdown of scheduleReorgLoop
 	wg              sync.WaitGroup // tracks loop, scheduleReorgLoop
+	ptxCond         *sync.Cond     // tracks pending transactions
 }
 
 type txpoolResetRequest struct {
@@ -293,6 +294,7 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 		reorgDoneCh:     make(chan chan struct{}),
 		reorgShutdownCh: make(chan struct{}),
 		gasPrice:        new(big.Int).SetUint64(config.PriceLimit),
+		ptxCond:         sync.NewCond(&sync.Mutex{}),
 	}
 	pool.locals = newAccountSet(pool.signer)
 	for _, addr := range config.Locals {
@@ -1142,6 +1144,11 @@ func (pool *TxPool) runReorg(done chan struct{}, reset *txpoolResetRequest, dirt
 		}
 		pool.txFeed.Send(NewTxsEvent{txs})
 	}
+	pool.ptxCond.L.Lock()
+	if len(pool.pending) > 0 {
+		pool.ptxCond.Broadcast()
+	}
+	pool.ptxCond.L.Unlock()
 }
 
 // reset retrieves the current state of the blockchain and ensures the content
@@ -1490,6 +1497,26 @@ func (pool *TxPool) demoteUnexecutables() {
 			delete(pool.pending, addr)
 		}
 	}
+}
+
+// WaitForPendingTxns waits on ptxCond and unlocks when a broadcast message is sent on ptxCond
+func (pool *TxPool) WaitForPendingTxns() {
+	log.Info("IBFT: ->TxPool#WaitForPendingTxns")
+	log.Info("IBFT: TxPool#WaitForPendingTxns - waiting on lock")
+	pool.ptxCond.L.Lock()
+	defer pool.ptxCond.L.Unlock()
+	log.Info("IBFT: TxPool#WaitForPendingTxns - got lock, waiting on condition var")
+	pending, queued := pool.Stats()
+	log.Info("IBFT: TxPool#WaitForPendingTxns", "pending", pending, "queued", queued)
+	pool.mu.RLock()
+	for len(pool.pending) == 0 {
+		pool.mu.RUnlock()
+		pool.ptxCond.Wait()
+		pool.mu.RLock()
+	}
+	pool.mu.RUnlock()
+	log.Info("IBFT: TxPool#WaitForPendingTxns - got signal on condition var, unlocking")
+	log.Info("IBFT: TxPool#WaitForPendingTxns->")
 }
 
 // addressByHeartbeat is an account address tagged with its last activity timestamp.

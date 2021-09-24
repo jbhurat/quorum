@@ -194,6 +194,10 @@ func makeFullNode(ctx *cli.Context) (*node.Node, ethapi.Backend) {
 		utils.RegisterRaftService(stack, ctx, &cfg.Node, ethService)
 	}
 
+	if ctx.GlobalBool(utils.IstanbulModeFlag.Name) && !ctx.GlobalBool(utils.RaftModeFlag.Name) {
+		utils.RegisterIBFTService(stack, ethService)
+	}
+
 	if private.IsQuorumPrivacyEnabled() {
 		utils.RegisterExtensionService(stack, ethService)
 	}

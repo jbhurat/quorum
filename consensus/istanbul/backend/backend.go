@@ -236,7 +236,7 @@ func (sb *Backend) Commit(proposal istanbul.Proposal, seals [][]byte, round *big
 	// -- if success, the ChainHeadEvent event will be broadcasted, try to build
 	//    the next block and the previous Seal() will be stopped.
 	// -- otherwise, a error will be returned and a round change event will be fired.
-	if sb.proposedBlockHash == block.Hash() {
+/*	if sb.proposedBlockHash == block.Hash() {
 		// feed block hash to Seal() and wait the Seal() result
 		sb.commitCh <- block
 		return nil
@@ -244,7 +244,9 @@ func (sb *Backend) Commit(proposal istanbul.Proposal, seals [][]byte, round *big
 
 	if sb.broadcaster != nil {
 		sb.broadcaster.Enqueue(fetcherID, block)
-	}
+	}*/
+
+	sb.commitCh <- block
 
 	return nil
 }

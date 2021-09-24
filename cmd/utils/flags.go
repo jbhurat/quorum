@@ -21,6 +21,7 @@ import (
 	"crypto/ecdsa"
 	"encoding/json"
 	"fmt"
+	"github.com/ethereum/go-ethereum/ibft"
 	"io"
 	"io/ioutil"
 	"math/big"
@@ -841,6 +842,10 @@ var (
 		Usage: "Value will be passed to an account plugin if being used.  See the account plugin implementation's documentation for further details",
 	}
 	// Istanbul settings
+	IstanbulModeFlag = cli.BoolFlag{
+		Name:  "istanbulservice",
+		Usage: "If enabled, uses ibft registered as a service instead of Quorum Chain for consensus",
+	}
 	IstanbulRequestTimeoutFlag = cli.Uint64Flag{
 		Name:  "istanbul.requesttimeout",
 		Usage: "Timeout for each Istanbul round in milliseconds",
@@ -2062,6 +2067,16 @@ func RegisterPermissionService(stack *node.Node, useDns bool) {
 		Fatalf("failed to load the permission contracts as given in %s due to %v", params.PERMISSION_MODEL_CONFIG, err)
 	}
 	log.Info("permission service registered")
+}
+
+// RegisterIBFTService registers IBFT Service
+func RegisterIBFTService(stack *node.Node, ethService *eth.Ethereum) {
+	log.Info("Registering IBFT service")
+	_, err := ibft.NewIBFTService(stack, ethService)
+	if err != nil {
+		Fatalf("ibft: Failed to register the IBFT service: %v", err)
+	}
+	log.Info("Registered IBFT service")
 }
 
 func RegisterRaftService(stack *node.Node, ctx *cli.Context, nodeCfg *node.Config, ethService *eth.Ethereum) {

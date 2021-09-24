@@ -137,12 +137,13 @@ func (sb *Backend) SetBroadcaster(broadcaster consensus.Broadcaster) {
 	sb.broadcaster = broadcaster
 }
 
-func (sb *Backend) NewChainHead() error {
+func (sb *Backend) NewChainHead() (chan struct{}, error) {
 	sb.coreMu.RLock()
 	defer sb.coreMu.RUnlock()
 	if !sb.coreStarted {
-		return istanbul.ErrStoppedEngine
+		return nil, istanbul.ErrStoppedEngine
 	}
-	go sb.istanbulEventMux.Post(istanbul.FinalCommittedEvent{})
-	return nil
+	startedNewRoundCh := make(chan struct{})
+	go sb.istanbulEventMux.Post(istanbul.FinalCommittedEvent{StartedNewRoundCh: startedNewRoundCh})
+	return startedNewRoundCh, nil
 }

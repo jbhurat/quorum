@@ -154,7 +154,11 @@ func (c *core) handleEvents() {
 			}
 			switch event.Data.(type) {
 			case istanbul.FinalCommittedEvent:
+				log.Info("IBFT: core#handleEvents - handling FinalCommittedEvent")
 				c.handleFinalCommitted()
+				log.Info("IBFT: core#handleEvents - sending signal to StartNewRoundCh")
+				event.Data.(istanbul.FinalCommittedEvent).StartedNewRoundCh <- struct{}{}
+				log.Info("IBFT: core#handleEvents - sent signal to StartNewRoundCh")
 			}
 		}
 	}
